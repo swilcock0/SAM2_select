@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
+import copy
 
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -90,6 +91,10 @@ class SAM2App:
         self.master.bind("<Key-a>", self.pan_left)
         self.master.bind("<Key-d>", self.pan_right)
 
+        self._img_disp_cache = None
+        self._mask_disp_cache = None
+        self._cache_box = None
+
     def load_image(self):
         file_path = filedialog.askopenfilename()
         if file_path:
@@ -139,37 +144,47 @@ class SAM2App:
         lower = upper + vh
         return (left, upper, right, lower)
 
-    def show_image(self):
+    def show_image(self, update_cache=True):
         if self.image is None:
             return
-        # Crop to viewport
         box = self.get_viewport()
-        img_crop = self.image.crop(box)
-        mask_img_crop = (self.display_image.crop(box)
-                         if self.display_image is not None
-                         else Image.new("RGB", img_crop.size, (128,128,128)))
-        # Draw points (only those visible in viewport)
-        draw = ImageDraw.Draw(img_crop)
-        for pt in self.points:
-            if box[0] <= pt[0] < box[2] and box[1] <= pt[1] < box[3]:
-                r = 10
-                color = "blue" if pt[2] == 1 else "red"
-                draw.ellipse((pt[0]-box[0]-r, pt[1]-box[1]-r, pt[0]-box[0]+r, pt[1]-box[1]+r), fill=color, outline="white", width=5)
-        # Draw crosshair on mask image
+        # Only update the cache if needed
+        if update_cache or self._img_disp_cache is None or self._cache_box != box:
+            img_crop = self.image.crop(box)
+            mask_img_crop = (self.display_image.crop(box)
+                             if self.display_image is not None
+                             else Image.new("RGB", img_crop.size, (128,128,128)))
+            # Draw points (only those visible in viewport)
+            draw = ImageDraw.Draw(img_crop)
+            for pt in self.points:
+                if box[0] <= pt[0] < box[2] and box[1] <= pt[1] < box[3]:
+                    r = 10
+                    color = "blue" if pt[2] == 1 else "red"
+                    draw.ellipse((pt[0]-box[0]-r, pt[1]-box[1]-r, pt[0]-box[0]+r, pt[1]-box[1]+r), fill=color, outline="white", width=5)
+            img_disp = img_crop.resize((DISPLAY_SIZE, DISPLAY_SIZE), Image.LANCZOS)
+            mask_disp = mask_img_crop.resize((DISPLAY_SIZE, DISPLAY_SIZE), Image.LANCZOS)
+            self._img_disp_cache = img_disp
+            self._mask_disp_cache = mask_disp
+            self._cache_box = box
+        else:
+            img_disp = self._img_disp_cache
+            mask_disp = self._mask_disp_cache
+
+        # Draw crosshair on a copy of the cached mask image
+        mask_disp_with_cross = mask_disp.copy()
         if self.cursor_pos is not None:
             x, y = self.cursor_pos
             if box[0] <= x < box[2] and box[1] <= y < box[3]:
-                draw_mask = ImageDraw.Draw(mask_img_crop)
-                x_vp, y_vp = x - box[0], y - box[1]
+                draw_mask = ImageDraw.Draw(mask_disp_with_cross)
+                x_vp = int((x - box[0]) * DISPLAY_SIZE / (box[2] - box[0]))
+                y_vp = int((y - box[1]) * DISPLAY_SIZE / (box[3] - box[1]))
                 cross_len = 25
                 draw_mask.line((x_vp-cross_len, y_vp, x_vp+cross_len, y_vp), fill="white", width=9)
                 draw_mask.line((x_vp, y_vp-cross_len, x_vp, y_vp+cross_len), fill="white", width=9)
                 draw_mask.line((x_vp-cross_len, y_vp, x_vp+cross_len, y_vp), fill="black", width=5)
                 draw_mask.line((x_vp, y_vp-cross_len, x_vp, y_vp+cross_len), fill="black", width=5)
-        # Resize for display
-        img_disp = img_crop.resize((DISPLAY_SIZE, DISPLAY_SIZE), Image.LANCZOS)
-        mask_disp = mask_img_crop.resize((DISPLAY_SIZE, DISPLAY_SIZE), Image.LANCZOS)
-        for pil_img, label in [(img_disp, self.image_label), (mask_disp, self.mask_label)]:
+
+        for pil_img, label in [(img_disp, self.image_label), (mask_disp_with_cross, self.mask_label)]:
             tk_img = ImageTk.PhotoImage(pil_img)
             label.config(image=tk_img)
             label.image = tk_img
@@ -197,6 +212,7 @@ class SAM2App:
         self.points.append((x_img, y_img, label))
         self.update_current_mask_in_list()
         self.run_sam2()
+        self.show_image()
         # Do NOT change self.selected_mask_index here!
 
     def on_motion(self, event):
@@ -205,7 +221,7 @@ class SAM2App:
         x_img = int(box[0] + x_disp * (box[2] - box[0]) / DISPLAY_SIZE)
         y_img = int(box[1] + y_disp * (box[3] - box[1]) / DISPLAY_SIZE)
         self.cursor_pos = (x_img, y_img)
-        self.show_image()
+        self.show_image(update_cache=False)
 
     def run_sam2(self):
         if not self.points or self.image is None or self.image_predictor is None:
@@ -328,7 +344,7 @@ class SAM2App:
         pan_step = 40
         cy = max(cy - pan_step, 0)
         self.viewport_center = (cx, cy)
-        self.show_image()
+        self.show_image(update_cache=False)
 
     def pan_down(self, event=None):
         if self.viewport_center is None:
@@ -337,7 +353,7 @@ class SAM2App:
         pan_step = 40
         cy = min(cy + pan_step, self.image.height)
         self.viewport_center = (cx, cy)
-        self.show_image()
+        self.show_image(update_cache=False)
 
     def pan_left(self, event=None):
         if self.viewport_center is None:
@@ -346,7 +362,7 @@ class SAM2App:
         pan_step = 40
         cx = max(cx - pan_step, 0)
         self.viewport_center = (cx, cy)
-        self.show_image()
+        self.show_image(update_cache=False)
 
     def pan_right(self, event=None):
         if self.viewport_center is None:
@@ -355,7 +371,7 @@ class SAM2App:
         pan_step = 40
         cx = min(cx + pan_step, self.image.width)
         self.viewport_center = (cx, cy)
-        self.show_image()
+        self.show_image(update_cache=False)
 
     def save_mask_to_file(self):
         mask_to_save = None
