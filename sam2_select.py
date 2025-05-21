@@ -14,28 +14,25 @@ class SAM2App:
         self.master = master
         self.master.title("SAM2 Point Segmentation Demo")
 
-        # Side-by-side images
-        self.frame = tk.Frame(master)
-        self.frame.pack(side=tk.RIGHT)
-        self.image_label = tk.Label(self.frame)
+        # Main frame for images and mask list
+        self.main_frame = tk.Frame(master)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Side-by-side images (left)
+        self.figures_frame = tk.Frame(self.main_frame)
+        self.figures_frame.pack(side=tk.LEFT, padx=10, pady=10)
+
+        self.image_label = tk.Label(self.figures_frame)
         self.image_label.pack(side=tk.LEFT)
-        self.mask_label = tk.Label(self.frame)
+        self.mask_label = tk.Label(self.figures_frame)
         self.mask_label.pack(side=tk.LEFT)
 
-        self.load_button = tk.Button(master, text="Load Image", command=self.load_image)
-        self.load_button.pack()
-        self.clear_button = tk.Button(master, text="Clear Points", command=self.clear_points)
-        self.clear_button.pack()
-        self.remove_button = tk.Button(master, text="Remove Last Point", command=self.remove_last_point)
-        self.remove_button.pack()
-        
-
-        # Mask list/history UI (with scrollbar, at side of preview)
-        self.mask_list_frame = tk.Frame(master)
-        self.mask_list_frame.pack(side=tk.LEFT, fill=tk.Y)
+        # Mask list/history UI (with scrollbar, at right of preview)
+        self.mask_list_frame = tk.Frame(self.main_frame)
+        self.mask_list_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
 
         self.mask_listbox = tk.Listbox(self.mask_list_frame, height=15, selectmode=tk.EXTENDED, exportselection=False)
-        self.mask_listbox.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+        self.mask_listbox.pack(side=tk.TOP, fill=tk.Y, expand=True)
 
         self.mask_scrollbar = tk.Scrollbar(self.mask_list_frame, orient=tk.VERTICAL, command=self.mask_listbox.yview)
         self.mask_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -43,13 +40,25 @@ class SAM2App:
 
         self.mask_listbox.bind("<<ListboxSelect>>", self.on_mask_select)
         self.new_mask_button = tk.Button(self.mask_list_frame, text="New Mask", command=self.new_mask)
-        self.new_mask_button.pack(side=tk.BOTTOM, fill=tk.X)
+        self.new_mask_button.pack(side=tk.TOP, fill=tk.X, pady=(10, 0))
         self.delete_mask_button = tk.Button(self.mask_list_frame, text="Delete Mask", command=self.delete_mask)
-        self.delete_mask_button.pack(side=tk.BOTTOM, fill=tk.X)
+        self.delete_mask_button.pack(side=tk.TOP, fill=tk.X)
         self.rename_mask_button = tk.Button(self.mask_list_frame, text="Rename Mask", command=self.rename_mask)
-        self.rename_mask_button.pack(side=tk.BOTTOM, fill=tk.X)
+        self.rename_mask_button.pack(side=tk.TOP, fill=tk.X)
         self.save_mask_button = tk.Button(self.mask_list_frame, text="Save Mask to File", command=self.save_mask_to_file)
-        self.save_mask_button.pack(side=tk.BOTTOM, fill=tk.X)
+        self.save_mask_button.pack(side=tk.TOP, fill=tk.X)
+
+        # Bottom frame for main action buttons
+        self.bottom_frame = tk.Frame(master)
+        self.bottom_frame.pack(side=tk.BOTTOM, pady=10)
+
+        self.load_button = tk.Button(self.bottom_frame, text="Load Image", command=self.load_image)
+        self.load_button.pack(side=tk.LEFT, padx=10)
+        self.clear_button = tk.Button(self.bottom_frame, text="Clear Points", command=self.clear_points)
+        self.clear_button.pack(side=tk.LEFT, padx=10)
+        self.remove_button = tk.Button(self.bottom_frame, text="Remove Last Point", command=self.remove_last_point)
+        self.remove_button.pack(side=tk.LEFT, padx=10)
+        
 
         self.points = []  # Each entry: (x, y, label)
         self.image = None
@@ -361,7 +370,8 @@ class SAM2App:
             mask_to_save = self.saved_masks[self.selected_mask_index][1]
         # Save the combined mask if "Combined" is selected
         elif (
-            self.selected_mask_index == len(self.saved_masks)
+            self.selected_mask_index is not None
+            and self.selected_mask_index == self.mask_listbox.size() - 1  # Fix: check if "Combined" is selected
             and hasattr(self, "combined_mask")
             and self.combined_mask is not None
         ):
