@@ -12,8 +12,8 @@ This project provides a Tkinter-based GUI for interactive point-based segmentati
 
 ## Requirements
 
-- Python 3.8+
-- [Pillow](https://python-pillow.org/)
+- Python
+- [Pillow](https://pillow.readthedocs.io/en/stable/handbook/tutorial.html)
 - [numpy](https://numpy.org/)
 - [tkinter](https://wiki.python.org/moin/TkInter)
 - [samv2](https://github.com/SauravMaheshkar/samv2) (`pip install git+https://github.com/SauravMaheshkar/samv2.git`)
